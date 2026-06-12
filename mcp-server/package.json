@@ -1,0 +1,59 @@
+{
+  "name": "agent-video-vision",
+  "version": "0.1.0",
+  "description": "Local-only video perception MCP server for AI coding agents (Claude Code, Codex)",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "agent-video-vision": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "python",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc && chmod +x dist/index.js",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "measure": "tsx scripts/measure-tokens.ts",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "js-tiktoken": "^1.0.21",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.5"
+  },
+  "keywords": [
+    "agents",
+    "mcp",
+    "mcp-server",
+    "video",
+    "vision",
+    "multimodal",
+    "ffmpeg",
+    "whisper",
+    "parakeet"
+  ],
+  "author": "bengemine",
+  "license": "MIT",
+  "homepage": "https://github.com/bengemine/agent-video-vision",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bengemine/agent-video-vision.git"
+  },
+  "bugs": {
+    "url": "https://github.com/bengemine/agent-video-vision/issues"
+  }
+}
