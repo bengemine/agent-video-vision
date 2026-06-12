@@ -66,12 +66,12 @@ export function deriveFps(params: DeriveFpsParams): number {
 export function registerVideoWatch(server: McpServer): void {
   server.tool(
     "video_watch",
-    "Extract frames and process audio from a local video file or YouTube URL. Returns frames (as base64 images or text descriptions) + transcription + audio analysis for the calling agent to understand the video content. IMPORTANT: For videos longer than 30 seconds, call video_analyze FIRST to get structural data (scene changes, silence, transcription) before calling this tool — use that data to set smart segments with variable FPS.",
+    "Extract frames and process audio from a local video file or YouTube URL. Returns frames (as base64 images, text descriptions, or file paths) + transcription + audio analysis for the calling agent to understand the video content. IMPORTANT: For videos longer than 30 seconds, call video_analyze FIRST to get structural data (scene changes, silence, transcription) before calling this tool — use that data to set smart segments with variable FPS.",
     {
       path: z.string().describe("Absolute/relative path to the video file, or a YouTube URL"),
       fps: z.union([z.coerce.number().positive(), z.literal("auto")]).default("auto").describe("Frames per second to extract"),
       resolution: z.coerce.number().min(128).max(2048).optional().describe("Frame width in px (maintains aspect ratio)"),
-      frame_mode: z.enum(["images", "descriptions"]).optional().describe("Return frames as base64 images or text descriptions"),
+      frame_mode: z.enum(["images", "descriptions", "paths"]).optional().describe("Return frames as base64 images, text descriptions, or file paths to open with the host's image viewer"),
       frame_format: z.enum(["jpeg", "png", "webp"]).optional().describe("Frame image format for extraction"),
       start_time: z.string().regex(HMS_REGEX, "Must be HH:MM:SS format").optional().describe("Start time (e.g. '00:01:30')"),
       end_time: z.string().regex(HMS_REGEX, "Must be HH:MM:SS format").optional().describe("End time (e.g. '00:05:00')"),
@@ -95,8 +95,9 @@ export function registerVideoWatch(server: McpServer): void {
       const frameExtension = frameFormatExtension(frameFormat);
       const frameMimeType = frameFormatMimeType(frameFormat);
 
-      // Session support
-      const useSession = config.enable_index;
+      // Session support. Paths mode forces the session dir so frame files
+      // survive the call — the host opens them from disk afterwards.
+      const useSession = config.enable_index || frameMode === "paths";
       let sessionDir: string | null = null;
       let manifest: SessionManifest | null = null;
 
@@ -173,6 +174,9 @@ export function registerVideoWatch(server: McpServer): void {
 
               const filePath = join(resDir, timestampToFormattedFilename(frame.timestamp, frameExtension));
               copyFileSync(frame.sourcePath, filePath);
+              // Point the frame at its persistent session copy — the temp
+              // extraction dir may be cleaned up before the host reads paths.
+              frame.sourcePath = filePath;
               manifestEntries.push({ timestamp: frame.timestamp, file: filePath });
             }
 
@@ -253,8 +257,9 @@ export function registerVideoWatch(server: McpServer): void {
       // 8. Build result
       const result: VideoWatchResult = { metadata, frames, audio };
 
-      // 9. Cleanup temp dir (only when not using session — session dir is persistent)
-      if (!useSession) {
+      // 9. Cleanup temp dir (only when indexing is off — session dir is persistent;
+      //    in paths-forced sessions the frames were already copied out of workDir)
+      if (!config.enable_index) {
         rmSync(workDir, { recursive: true, force: true });
       }
 
@@ -299,6 +304,13 @@ export function registerVideoWatch(server: McpServer): void {
             });
           }
         }
+      } else if (frameMode === "paths") {
+        // paths mode — list persistent file paths; the host opens them itself
+        const lines = frames.map((f) => `${f.timestamp} -> ${f.sourcePath ?? "(file missing)"}`);
+        content.push({
+          type: "text",
+          text: `## Frames (${frames.length} extracted at ${fps} fps)\nFrame mode is 'paths' — open these image files with your host's image viewing tool (e.g. Codex view_image) to see them.\n\n${lines.join("\n")}`,
+        });
       } else {
         // descriptions mode — return frame data for the calling agent to convert to text
         content.push({

@@ -6,8 +6,8 @@ Thanks for your interest in contributing! This document explains how to get set 
 
 ```bash
 # Clone and install
-git clone https://github.com/bengemine/agent-video-vision agent-video-vision
-cd agent-video-vision/mcp-server
+git clone https://github.com/bengemine/agent-video-vision ~/agent-video-vision
+cd ~/agent-video-vision/mcp-server
 npm install
 
 # Build
@@ -27,7 +27,7 @@ You'll need `ffmpeg` installed (`brew install ffmpeg` on macOS, `apt install ffm
 Claude Code:
 
 ```bash
-claude --plugin-dir /path/to/agent-video-vision
+claude --plugin-dir ~/agent-video-vision
 ```
 
 Codex CLI: see [codex/README.md](./codex/README.md).

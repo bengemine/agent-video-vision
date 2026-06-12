@@ -68,12 +68,21 @@ You have access to video understanding tools via the agent-video-vision MCP serv
    already have at the same resolution. Do not re-request frames you
    already have in context.
 
+## Frame delivery modes
+
+`frame_mode` (set via `video_configure`) controls how `video_watch` / `video_detail` return frames:
+
+- **`images`** (Claude Code default) — frames come back as inline images in the tool result.
+- **`paths`** (Codex default) — the tool returns `timestamp -> /abs/path` file lists instead of inline images. Codex MUST use this mode: inline MCP images are invisible to Codex; it views image files via its `view_image` tool.
+- **`descriptions`** — host-fulfilled text descriptions instead of images (fewest tokens; see below).
+
 ## Frame Descriptions (frame_mode: "descriptions")
 
 When `frame_mode` is `"descriptions"`, the server returns the frames plus a neutral instruction asking for text descriptions — it does NOT call any LLM itself. YOU fulfill the descriptions, depending on which host you are:
 
 - **Claude Code:** spawn the `frame-describer` subagent (bundled with this plugin) and pass it the frame images. It returns one description per frame in the format `Frame at [timestamp] — [description]`.
-- **Codex CLI (or any host without subagents):** view the frame images directly in the tool result and write the descriptions yourself, inline, using the same format. Cover people, on-screen text, objects, setting, and changes from the previous frame. Be factual — describe, don't interpret.
+- **Codex CLI:** use `frame_mode: "paths"`, then open the listed frame files with your `view_image` tool. For a handful of frames, describe them yourself inline in the same `Frame at [timestamp] — [description]` format. For larger batches, delegate to the **frame-describer** custom agent — name it explicitly as "frame-describer" in your delegation prompt (Codex only uses custom agents when they are named explicitly) and pass it the frame file paths with timestamps. (Install it once via the setup skill: it copies `codex/agents/frame-describer.toml` into `~/.codex/agents/`.)
+- **Any other host without subagents:** view the frames and write the descriptions yourself inline, same format. Cover people, on-screen text, objects, setting, and changes from the previous frame. Be factual — describe, don't interpret.
 
 Either way, use the resulting descriptions in place of repeated image viewing for follow-up reasoning.
 
@@ -97,7 +106,7 @@ Either way, use the resulting descriptions in place of repeated image viewing fo
 
 You receive:
 - **Manifest** (when enable_index is on) — index of all cached frames by resolution and timestamp. Use this to avoid redundant requests.
-- **Frames** as images — look at them to understand what's happening visually
+- **Frames** — inline images (`frame_mode: "images"`) or `timestamp -> /abs/path` file lists (`frame_mode: "paths"`; open the files you need with your image-viewing tool). Look at them to understand what's happening visually.
 - **Audio transcription** with timestamps — read the speech content
 - **Analysis data** — scene changes, silence intervals, motion levels, etc.
 

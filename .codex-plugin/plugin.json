@@ -1,0 +1,20 @@
+{
+  "name": "agent-video-vision",
+  "version": "0.1.0",
+  "description": "Give your agent the ability to watch and understand videos — local-only frame extraction and CPU transcription (Parakeet/Whisper), no API keys",
+  "author": {
+    "name": "bengemine",
+    "url": "https://github.com/bengemine"
+  },
+  "homepage": "https://github.com/bengemine/agent-video-vision",
+  "repository": "https://github.com/bengemine/agent-video-vision",
+  "license": "MIT",
+  "keywords": ["video", "vision", "multimodal", "ffmpeg", "whisper", "parakeet", "local", "perception"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Agent Video Vision",
+    "shortDescription": "Watch and understand videos locally — ffmpeg frames + CPU transcription, no API keys",
+    "category": "productivity"
+  }
+}

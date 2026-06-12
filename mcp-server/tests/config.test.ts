@@ -35,6 +35,13 @@ describe("config", () => {
     expect(loaded.frame_resolution).toBe(768);
   });
 
+  it("saves and loads frame_mode 'paths'", () => {
+    const configPath = join(TEST_DIR, "config.json");
+    saveConfig(configPath, { ...defaultConfig, frame_mode: "paths" });
+    const loaded = loadConfig(configPath);
+    expect(loaded.frame_mode).toBe("paths");
+  });
+
   it("merges partial config with defaults", () => {
     const configPath = join(TEST_DIR, "config.json");
     writeFileSync(configPath, JSON.stringify({ engine: "parakeet" }));

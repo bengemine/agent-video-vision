@@ -14,7 +14,7 @@ export function registerVideoConfigure(server: McpServer): void {
       parakeet_model_dir: z.string().min(1).optional(),
       parakeet_quantization: z.enum(["int8", "fp32"]).optional(),
       parakeet_python: z.string().min(1).optional(),
-      frame_mode: z.enum(["images", "descriptions"]).optional(),
+      frame_mode: z.enum(["images", "descriptions", "paths"]).optional(),
       frame_format: z.enum(["jpeg", "png", "webp"]).optional(),
       frame_resolution: z.number().min(128).max(2048).optional(),
       default_fps: z.union([z.number().positive(), z.literal("auto")]).optional(),

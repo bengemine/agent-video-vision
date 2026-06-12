@@ -2,7 +2,7 @@ export type Backend = "local" | "youtube-captions" | "unconfigured" | "none";
 export type Engine = "unconfigured" | "parakeet" | "whisper-cpp" | "whisper-python";
 export type WhisperModel = "tiny" | "base" | "small" | "medium" | "large-v3-turbo" | "large-v3" | "auto";
 export type ParakeetQuantization = "int8" | "fp32";
-export type FrameMode = "images" | "descriptions";
+export type FrameMode = "images" | "descriptions" | "paths";
 export type FrameFormat = "jpeg" | "png" | "webp";
 
 export interface Config {

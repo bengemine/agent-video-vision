@@ -32,6 +32,8 @@ interface ViewableFrame {
   timestamp: string;
   image?: string;
   mimeType?: string;
+  /** Absolute path of the persisted frame file (paths mode). */
+  path?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -62,12 +64,14 @@ function buildViewablePool(
   extractedFrames: SegmentFrame[],
   manifest: SessionManifest | null,
   format: FrameFormat,
+  includeImages = true,
 ): ViewableFrame[] {
   if (extractedFrames.length > 0) {
     return extractedFrames.map((f) => ({
       timestamp: f.timestamp,
       image: f.image,
       mimeType: frameFormatMimeType(f.format ?? "jpeg"),
+      path: f.sourcePath,
     }));
   }
 
@@ -92,12 +96,16 @@ function buildViewablePool(
   return Array.from(byTimestamp.entries())
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([timestamp, { file }]) => {
+      if (!includeImages) {
+        // paths mode — no need to read image bytes into memory
+        return { timestamp, path: file };
+      }
       try {
         const data = readFileSync(file);
-        return { timestamp, image: data.toString("base64"), mimeType: mimeTypeFromFrameFile(file) };
+        return { timestamp, image: data.toString("base64"), mimeType: mimeTypeFromFrameFile(file), path: file };
       } catch {
         // File missing from disk — still include the entry without image data.
-        return { timestamp };
+        return { timestamp, path: file };
       }
     });
 }
@@ -110,6 +118,7 @@ function lookupTimestampsInManifest(
   manifest: SessionManifest,
   timestamps: string[],
   format: FrameFormat,
+  includeImages = true,
 ): ViewableFrame[] {
   const result: ViewableFrame[] = [];
 
@@ -130,11 +139,16 @@ function lookupTimestampsInManifest(
     }
 
     if (bestFile !== null) {
+      if (!includeImages) {
+        // paths mode — no need to read image bytes into memory
+        result.push({ timestamp: ts, path: bestFile });
+        continue;
+      }
       try {
         const data = readFileSync(bestFile);
-        result.push({ timestamp: ts, image: data.toString("base64"), mimeType: mimeTypeFromFrameFile(bestFile) });
+        result.push({ timestamp: ts, image: data.toString("base64"), mimeType: mimeTypeFromFrameFile(bestFile), path: bestFile });
       } catch {
-        result.push({ timestamp: ts });
+        result.push({ timestamp: ts, path: bestFile });
       }
     }
     // Timestamps not found are silently omitted — not an error.
@@ -198,12 +212,16 @@ export function registerVideoDetail(server: McpServer): void {
       const resolved = await resolveVideoInputDetailed(params.path);
       const safePath = resolved.path;
       const frameFormat = params.frame_format || config.frame_format;
+      const frameMode = config.frame_mode;
+      // Paths mode forces the session dir so frame files survive the call —
+      // the host opens them from disk afterwards.
+      const useSession = config.enable_index || frameMode === "paths";
 
       let sessionDir: string | null = null;
       let manifest: SessionManifest | null = null;
       let videoHash: string | null = null;
 
-      if (config.enable_index) {
+      if (useSession) {
         videoHash = computeVideoHash(safePath);
         sessionDir = getSessionDir(SESSIONS_DIR, safePath);
         manifest = loadManifest(sessionDir) ?? createManifest(videoHash, safePath);
@@ -231,10 +249,10 @@ export function registerVideoDetail(server: McpServer): void {
           rmSync(tmpWorkDir, { recursive: true, force: true });
         }
 
-        // If session indexing is enabled, persist frames to the session
-        // directory with stable, timestamp-keyed filenames, then merge into
-        // the manifest for deduplication.
-        if (config.enable_index && manifest && sessionDir) {
+        // If the session dir is active (indexing enabled, or paths mode),
+        // persist frames to the session directory with stable, timestamp-keyed
+        // filenames, then merge into the manifest for deduplication.
+        if (useSession && manifest && sessionDir) {
           // Group frames by resolution bucket.
           const byResolution = new Map<string, SegmentFrame[]>();
           for (const frame of extractedFrames) {
@@ -266,6 +284,9 @@ export function registerVideoDetail(server: McpServer): void {
                 }
               }
 
+              // Point the frame at its persistent session copy — the temp
+              // extraction dir is already deleted by this point.
+              frame.sourcePath = filePath;
               manifestEntries.push({ timestamp: frame.timestamp, file: filePath });
             }
 
@@ -280,12 +301,13 @@ export function registerVideoDetail(server: McpServer): void {
       // Phase 2: Determine which frames to return as images
       // ------------------------------------------------------------------
       let framesToView: ViewableFrame[] = [];
+      const includeImages = frameMode !== "paths";
 
       if (params.view && params.view.length > 0) {
         // Mode A: caller specified exact timestamps.
         if (manifest) {
           // Look them up in the session cache (highest resolution preferred).
-          framesToView = lookupTimestampsInManifest(manifest, params.view, frameFormat);
+          framesToView = lookupTimestampsInManifest(manifest, params.view, frameFormat, includeImages);
         } else {
           // No session — filter from frames just extracted in this call.
           for (const ts of params.view) {
@@ -301,12 +323,12 @@ export function registerVideoDetail(server: McpServer): void {
         }
       } else if (params.view_sample !== undefined) {
         // Mode B: return N evenly spaced frames.
-        const pool = buildViewablePool(extractedFrames, manifest, frameFormat);
+        const pool = buildViewablePool(extractedFrames, manifest, frameFormat, includeImages);
         const indices = sampleFrameIndices(pool.length, params.view_sample);
         framesToView = indices.map((i) => pool[i]);
       } else {
         // Mode C: return all available frames.
-        framesToView = buildViewablePool(extractedFrames, manifest, frameFormat);
+        framesToView = buildViewablePool(extractedFrames, manifest, frameFormat, includeImages);
       }
 
       // ------------------------------------------------------------------
@@ -342,6 +364,16 @@ export function registerVideoDetail(server: McpServer): void {
           type: "text",
           text: `## Session Manifest\n${JSON.stringify(summary, null, 2)}`,
         });
+      }
+
+      if (frameMode === "paths") {
+        // 2+3. paths mode — list persistent file paths; the host opens them itself
+        const lines = framesToView.map((f) => `${f.timestamp} -> ${f.path ?? "(file missing)"}`);
+        content.push({
+          type: "text",
+          text: `## Viewing ${framesToView.length} frame(s)\nFrame mode is 'paths' — open these image files with your host's image viewing tool (e.g. Codex view_image) to see them.\n\n${lines.join("\n")}`,
+        });
+        return { content: content as any };
       }
 
       // 2. Frame count info
