@@ -22,3 +22,4 @@ config.json
 *.jpg
 *.png
 !mcp-server/tests/fixtures/*
+!assets/*

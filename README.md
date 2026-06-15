@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/banner.png" alt="Agent Video Vision — now agents can watch videos too" width="720">
+</p>
+
 # agent-video-vision
 
 Give your coding agent the ability to **watch and understand videos** — fully local, no API keys, ever.
