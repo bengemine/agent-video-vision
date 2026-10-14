@@ -14,9 +14,8 @@ export const defaultConfig: Config = {
   engine: "unconfigured",
   whisper_model: "auto",
   whisper_at: false,
-  parakeet_model_dir: join(DATA_DIR, "models", "parakeet-tdt-0.6b-v3-int8"),
-  parakeet_quantization: "int8",
-  parakeet_python: join(DATA_DIR, "venv", "bin", "python"),
+  fluid_model_dir: join(DATA_DIR, "models", "fluid-speech-mini-onnx"),
+  fluid_python: join(DATA_DIR, "venv", "bin", "python"),
   frame_mode: "images",
   frame_format: "jpeg",
   frame_resolution: 512,
@@ -32,7 +31,21 @@ export function loadConfig(configPath: string): Config {
     return { ...defaultConfig };
   }
   const raw = JSON.parse(readFileSync(configPath, "utf-8"));
+  migrateLegacyConfig(raw);
   return { ...defaultConfig, ...raw };
+}
+
+// Configs written before the Fluid Speech switch name the removed Parakeet
+// engine and its keys. Map the engine over (same venv path, new model dir
+// default) and drop the dead keys so they never shadow the new defaults.
+function migrateLegacyConfig(raw: Record<string, unknown>): void {
+  if (raw.engine === "parakeet") {
+    raw.engine = "fluid-speech";
+    if (typeof raw.parakeet_python === "string") raw.fluid_python = raw.parakeet_python;
+  }
+  delete raw.parakeet_model_dir;
+  delete raw.parakeet_quantization;
+  delete raw.parakeet_python;
 }
 
 export function saveConfig(configPath: string, config: Config): void {

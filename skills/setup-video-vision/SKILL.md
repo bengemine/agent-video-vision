@@ -1,6 +1,6 @@
 ---
 name: setup-video-vision
-description: Use when the user says "set up video vision", "install video vision", "configure video transcription", asks to configure agent-video-vision, or hits first-run setup errors (missing engine, venv, or Parakeet model). Interactive wizard — choose a transcription engine, install deps, download models, verify.
+description: Use when the user says "set up video vision", "install video vision", "configure video transcription", asks to configure agent-video-vision, or hits first-run setup errors (missing engine, venv, or Fluid Speech model). Interactive wizard — choose a transcription engine, install deps, download models, verify.
 ---
 
 # Setup Video Vision
@@ -25,7 +25,7 @@ Ask the user:
 
 > Which local transcription engine do you want?
 >
-> **a) parakeet** (recommended) — NVIDIA Parakeet TDT 0.6B v3, ONNX int8 on CPU. ~5x realtime, English + 24 European languages. Needs a one-time ~670MB model download and a small Python venv.
+> **a) fluid-speech** (recommended) — Fluid Speech Mini, ONNX on CPU. ~8x realtime, ~0.7GB RAM, Parakeet-class accuracy. **English only.** Needs a one-time ~300MB model download and a small Python 3.12+ venv.
 >
 > **b) whisper-cpp** — whisper.cpp (`whisper-cli`). ~1–2x realtime, 99 languages. Models auto-download on first use.
 >
@@ -35,59 +35,63 @@ Ask the user:
 
 ## Step 2: Dependency Check
 
-Call `video_setup` with the chosen engine. Report exactly what is present and what is missing (ffmpeg, whisper-cli, Python venv, Parakeet model dir, yt-dlp). Mention that `yt-dlp` is optional and only needed for YouTube URLs.
+Call `video_setup` with the chosen engine. Report exactly what is present and what is missing (ffmpeg, whisper-cli, Python venv, Fluid Speech model dir, yt-dlp). Mention that `yt-dlp` is optional and only needed for YouTube URLs.
 
 If the `video_*` tools are not available at all, jump to "Host-specific final steps" below to wire up the MCP server first, then come back here.
 
 For anything missing, walk through the relevant section below.
 
-## Step 3a: Parakeet Setup (engine = parakeet)
+## Step 3a: Fluid Speech Setup (engine = fluid-speech)
 
 First ask:
 
-> Do you already have a Parakeet ONNX model directory on disk (for example from the Handy app)?
+> Do you already have the Fluid Speech Mini ONNX model directory on disk?
 >
 > **a) Yes** — give me the path
 >
-> **b) No** — download it for me (~670MB)
+> **b) No** — download it for me (~300MB)
 
-**If yes:** call `video_configure` with `parakeet_model_dir` set to their path. Skip the model download below, but still verify the venv.
+**If yes:** call `video_configure` with `fluid_model_dir` set to their path. Skip the model download below, but still verify the venv.
 
 **If no (or venv missing), guide through these exact commands.**
+
+The venv must be **Python 3.12 or newer**: the model's 2-bit weights need ONNX Runtime 1.31+, which is not published for older Pythons. Prefer `uv` — it downloads a private Python 3.12 if the system has none.
 
 1. Create the venv:
 
 ```bash
-python3 -m venv ~/.agent-video-vision/venv
+uv venv --python 3.12 ~/.agent-video-vision/venv
 ```
 
-If that fails (missing `python3-venv` / "ensurepip is not available"), use uv instead:
+Without uv (only if `python3.12` or newer is already installed):
 
 ```bash
-uv venv ~/.agent-video-vision/venv
+python3.12 -m venv ~/.agent-video-vision/venv
 ```
 
-2. Install onnx-asr (note the onnxruntime pin — newer versions break onnx-asr):
+If an old venv exists at that path (for example from the Parakeet engine), delete it first: `rm -rf ~/.agent-video-vision/venv`.
+
+2. Install ONNX Runtime and the helpers:
 
 ```bash
-~/.agent-video-vision/venv/bin/pip install "onnx-asr[cpu,hub]" "onnxruntime<1.24"
+uv pip install --python ~/.agent-video-vision/venv/bin/python "onnxruntime>=1.31" numpy soundfile huggingface_hub
 ```
 
-uv variant:
+pip variant (venvs made with `python -m venv` have pip; `uv venv` ones do not):
 
 ```bash
-uv pip install --python ~/.agent-video-vision/venv/bin/python "onnx-asr[cpu,hub]" "onnxruntime<1.24"
+~/.agent-video-vision/venv/bin/pip install "onnxruntime>=1.31" numpy soundfile huggingface_hub
 ```
 
-3. Download the int8 model from HuggingFace (`istupakov/parakeet-tdt-0.6b-v3-onnx`):
+3. Download the ONNX build from HuggingFace (`FluidVoice-Labs/fluid-speech-mini-onnx`):
 
 ```bash
 ~/.agent-video-vision/venv/bin/python -c "
 from huggingface_hub import snapshot_download
 snapshot_download(
-  'istupakov/parakeet-tdt-0.6b-v3-onnx',
-  allow_patterns=['*.int8.onnx', 'vocab.txt', 'config.json'],
-  local_dir='~/.agent-video-vision/models/parakeet-tdt-0.6b-v3-int8'.replace('~', __import__('os').path.expanduser('~')),
+  'FluidVoice-Labs/fluid-speech-mini-onnx',
+  ignore_patterns=['assets/*'],
+  local_dir='~/.agent-video-vision/models/fluid-speech-mini-onnx'.replace('~', __import__('os').path.expanduser('~')),
 )
 print('done')
 "
@@ -148,7 +152,7 @@ Call `video_configure` with `frame_mode`. The host-specific section below has th
 
 ## Step 5: Save Engine
 
-Call `video_configure` with the chosen `engine` (plus `parakeet_model_dir` if not already saved). Confirm the resulting config back to the user.
+Call `video_configure` with the chosen `engine` (plus `fluid_model_dir` if not already saved). Confirm the resulting config back to the user.
 
 ## Step 6: Host-specific final steps
 
@@ -197,5 +201,5 @@ If the user provides one, call `video_info` on it, then `video_analyze` with `tr
 
 - Ask ONE question at a time — never combine multiple questions
 - Call `video_configure` after EACH answer to save incrementally
-- If the user says "default" or "just use defaults", set engine to `parakeet` with defaults, jump to Step 2, then still do Step 6 for your host
+- If the user says "default" or "just use defaults", set engine to `fluid-speech` with defaults, jump to Step 2, then still do Step 6 for your host
 - If the user seems experienced, keep it concise — don't over-explain

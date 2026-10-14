@@ -7,9 +7,9 @@ import { checkCommand, detectPlatform, recommendWhisperModel } from "../utils/pl
 export function registerVideoSetup(server: McpServer): void {
   server.tool(
     "video_setup",
-    "Check dependencies for video perception (ffmpeg always; whisper-cli, whisper, or the Parakeet venv/model depending on the engine; optional yt-dlp for YouTube URLs). Pure status report — it installs nothing.",
+    "Check dependencies for video perception (ffmpeg always; whisper-cli, whisper, or the Fluid Speech venv/model depending on the engine; optional yt-dlp for YouTube URLs). Pure status report — it installs nothing.",
     {
-      engine: z.enum(["parakeet", "whisper-cpp", "whisper-python"]).optional().describe("Audio engine to check — defaults to the configured engine"),
+      engine: z.enum(["fluid-speech", "whisper-cpp", "whisper-python"]).optional().describe("Audio engine to check — defaults to the configured engine"),
       whisper_model: z.enum(["tiny", "base", "small", "medium", "large-v3-turbo", "large-v3", "auto"]).default("auto"),
     },
     async ({ engine, whisper_model }) => {
@@ -18,8 +18,8 @@ export function registerVideoSetup(server: McpServer): void {
 
       const platform = detectPlatform();
       const result = await checkDependencies(effectiveEngine, {
-        pythonPath: config.parakeet_python,
-        modelDir: config.parakeet_model_dir,
+        pythonPath: config.fluid_python,
+        modelDir: config.fluid_model_dir,
       });
       const hasYtDlp = await checkCommand("yt-dlp");
 
@@ -35,17 +35,17 @@ export function registerVideoSetup(server: McpServer): void {
       report += `## Engine: ${effectiveEngine}\n\n`;
 
       if (effectiveEngine === "unconfigured") {
-        report += `No engine is configured yet. Pick one with video_configure (engine: "parakeet", "whisper-cpp", or "whisper-python"), or pass engine to this tool to check its dependencies.\n\n`;
+        report += `No engine is configured yet. Pick one with video_configure (engine: "fluid-speech", "whisper-cpp", or "whisper-python"), or pass engine to this tool to check its dependencies.\n\n`;
       }
 
       if (effectiveEngine === "whisper-cpp" || effectiveEngine === "whisper-python") {
         report += `- Recommended whisper model: ${resolvedModel}\n\n`;
       }
 
-      if (effectiveEngine === "parakeet") {
-        report += `- Python: ${config.parakeet_python}\n`;
-        report += `- Model dir: ${config.parakeet_model_dir}\n`;
-        report += `- Quantization: ${config.parakeet_quantization}\n\n`;
+      if (effectiveEngine === "fluid-speech") {
+        report += `- Model: Fluid Speech Mini (ONNX, English)\n`;
+        report += `- Python: ${config.fluid_python}\n`;
+        report += `- Model dir: ${config.fluid_model_dir}\n\n`;
       }
 
       report += `## YouTube URL Support\n`;

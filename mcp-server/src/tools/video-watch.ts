@@ -14,7 +14,7 @@ import {
 } from "../extractors/frames.js";
 import { extractAudio } from "../extractors/audio.js";
 import { transcribeWithWhisper } from "../backends/local.js";
-import { transcribeWithParakeet } from "../backends/parakeet.js";
+import { transcribeWithFluidSpeech } from "../backends/fluid-speech.js";
 import { parseHMS, shiftAudioResult } from "../utils/timestamps.js";
 import {
   buildCaptionAudioResult,
@@ -32,7 +32,7 @@ const UNCONFIGURED_MESSAGE = `## agent-video-vision is not configured yet!
 No audio engine is configured. Run the **video_setup** tool to check dependencies, then **video_configure** to pick a local engine.
 
 Available local engines (all fully offline):
-- **parakeet** — NVIDIA Parakeet TDT via ONNX. Fast, accurate. Requires a Python venv with onnx_asr and the exported model files.
+- **fluid-speech** — Fluid Speech Mini via ONNX Runtime. Fast, accurate, English only, ~300MB. Requires a Python 3.12+ venv with onnxruntime and the model files.
 - **whisper-cpp** — whisper.cpp. Requires the \`whisper-cli\` binary on PATH; models download automatically.
 - **whisper-python** — Python Whisper CLI. Requires the \`whisper\` command on PATH.`;
 
@@ -198,16 +198,15 @@ export function registerVideoWatch(server: McpServer): void {
             endTime: params.end_time,
           }),
         );
-      } else if (config.engine === "parakeet") {
+      } else if (config.engine === "fluid-speech") {
         const audioDir = join(workDir, "audio");
         audioPromise = extractAudio(safePath, audioDir, {
           startTime: params.start_time,
           endTime: params.end_time,
         }).then((wavPath) =>
-          transcribeWithParakeet(wavPath, {
-            pythonPath: config.parakeet_python,
-            modelDir: config.parakeet_model_dir,
-            quantization: config.parakeet_quantization,
+          transcribeWithFluidSpeech(wavPath, {
+            pythonPath: config.fluid_python,
+            modelDir: config.fluid_model_dir,
           }),
         );
       } else if (config.engine === "whisper-cpp" || config.engine === "whisper-python") {

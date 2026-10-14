@@ -10,8 +10,8 @@
   "plugins": [
     {
       "name": "agent-video-vision",
-      "description": "Local-only video perception for Claude Code and Codex CLI — extracts frames via ffmpeg and transcribes audio on your CPU with Parakeet or Whisper. No API keys, zero LLM calls from the server.",
-      "version": "0.1.0",
+      "description": "Local-only video perception for Claude Code and Codex CLI — extracts frames via ffmpeg and transcribes audio on your CPU with Fluid Speech Mini or Whisper. No API keys, zero LLM calls from the server.",
+      "version": "0.2.0",
       "source": "./",
       "category": "productivity",
       "homepage": "https://github.com/bengemine/agent-video-vision",
@@ -25,7 +25,7 @@
         "multimodal",
         "ffmpeg",
         "whisper",
-        "parakeet",
+        "fluid-speech",
         "local",
         "perception"
       ]

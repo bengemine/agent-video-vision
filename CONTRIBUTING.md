@@ -66,7 +66,7 @@ Note: only **local** engines are accepted. This project's core promise is local-
 
 Open an issue using the bug report template. Include:
 - Your OS and Node.js version
-- The engine you're using (parakeet, whisper-cpp, whisper-python)
+- The engine you're using (fluid-speech, whisper-cpp, whisper-python)
 - The host (Claude Code or Codex CLI)
 - The exact command or action that triggered the bug
 - Any error output from `~/.agent-video-vision/` logs or MCP stderr

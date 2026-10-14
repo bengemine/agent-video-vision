@@ -5,7 +5,7 @@ description: Use when the user mentions a video file (.mp4, .mov, .avi, .mkv, .w
 
 # Video Perception
 
-You have access to video understanding tools via the agent-video-vision MCP server. Everything runs locally — frame extraction via ffmpeg, transcription on CPU (Parakeet or Whisper). The server makes no LLM calls; all visual understanding happens in your session.
+You have access to video understanding tools via the agent-video-vision MCP server. Everything runs locally — frame extraction via ffmpeg, transcription on CPU (Fluid Speech Mini or Whisper). The server makes no LLM calls; all visual understanding happens in your session.
 
 ## Available Tools
 

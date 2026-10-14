@@ -13,7 +13,7 @@ A local-only video perception MCP server that works with **Claude Code** and **O
 
 - **Dual plugin** — one repo, two manifests: `.claude-plugin/plugin.json` (Claude Code) and `.codex-plugin/plugin.json` (Codex CLI). Skills, MCP config, and assets are shared at the repo root.
 - **Agent-agnostic** — same MCP server and skills for Claude Code and Codex CLI
-- **Local-only transcription** — NVIDIA Parakeet (ONNX, CPU) or Whisper. The Gemini/OpenAI API backends from upstream are removed. No API keys anywhere.
+- **Local-only transcription** — Fluid Speech Mini (ONNX, CPU, ~300MB) or Whisper. The Gemini/OpenAI API backends from upstream are removed. No API keys anywhere.
 - **Multimodal perception** — the agent sees frames directly and reads timestamped transcription
 - **YouTube support** — pass a URL; the server downloads it with `yt-dlp` and prefers YouTube captions
 - **Adaptive extraction** — the agent adjusts fps, time range, and resolution based on your question
@@ -74,41 +74,43 @@ Don't install the plugin twice — you'd get two separate clones that drift apar
 
 ## Transcription engines
 
-| | **parakeet** (recommended) | **whisper-cpp** | **whisper-python** |
+| | **fluid-speech** (recommended) | **whisper-cpp** | **whisper-python** |
 |---|---|---|---|
-| Model | NVIDIA Parakeet TDT 0.6B v3 (ONNX int8) | whisper.cpp (`whisper-cli`) | openai-whisper (Python) |
-| Speed on CPU | ~5x realtime | ~1–2x realtime | ~1x realtime |
-| Accuracy | Similar to Whisper | Good | Good |
-| Languages | English + 24 European languages | 99 languages | 99 languages |
-| Runs via | Python venv + [onnx-asr](https://github.com/istupakov/onnx-asr) | `whisper-cli` binary | `whisper` CLI |
+| Model | [Fluid Speech Mini](https://fluidvoice.com/labs/fluid-speech-mini) (ONNX, 2/4-bit) | whisper.cpp (`whisper-cli`) | openai-whisper (Python) |
+| Download | ~300MB | 75MB–3GB per model | 75MB–3GB per model |
+| Speed on CPU | ~8x realtime, ~0.7GB RAM | ~1–2x realtime | ~1x realtime |
+| Accuracy | Parakeet-class (4.5% WER on the Open ASR English sets, vendor-reported); robust to other voices in the room | Good | Good |
+| Languages | English only | 99 languages | 99 languages |
+| Runs via | Python 3.12+ venv + [ONNX Runtime](https://onnxruntime.ai) ≥ 1.31 | `whisper-cli` binary | `whisper` CLI |
 
-Pick **parakeet** unless you need a language it doesn't cover — then use **whisper-cpp**.
+Pick **fluid-speech** for English. For any other language use **whisper-cpp**.
+
+Fluid Speech Mini is a distilled model built on NVIDIA Parakeet TDT 0.6B v3 and Moondream Parakeet Ultra (CC BY 4.0). Segment timestamps come straight from its token-and-duration decoder, so no separate voice-activity model is needed.
 
 ## Setup flow
 
 Models are **never shipped in the repo**. Setup downloads them:
 
-**Parakeet** (one-time, ~670MB):
+**Fluid Speech Mini** (one-time, ~300MB):
 
 ```bash
-# 1. Create a Python venv for the ONNX runtime
-python3 -m venv ~/.agent-video-vision/venv
-# (no python3-venv? use uv instead: uv venv ~/.agent-video-vision/venv)
+# 1. Create a Python 3.12+ venv for ONNX Runtime (uv downloads 3.12 if needed)
+uv venv --python 3.12 ~/.agent-video-vision/venv
+# (or, with a system Python 3.12+: python3.12 -m venv ~/.agent-video-vision/venv)
 
-# 2. Install onnx-asr
-~/.agent-video-vision/venv/bin/pip install "onnx-asr[cpu,hub]" "onnxruntime<1.24"
+# 2. Install ONNX Runtime 1.31+ and the small helpers
+uv pip install --python ~/.agent-video-vision/venv/bin/python "onnxruntime>=1.31" numpy soundfile huggingface_hub
 
-# 3. Download the int8 ONNX model from HuggingFace
-#    istupakov/parakeet-tdt-0.6b-v3-onnx
-#    into ~/.agent-video-vision/models/parakeet-tdt-0.6b-v3-int8/
+# 3. Download the ONNX build from HuggingFace
+~/.agent-video-vision/venv/bin/python -c "from huggingface_hub import snapshot_download; snapshot_download('FluidVoice-Labs/fluid-speech-mini-onnx', local_dir='$HOME/.agent-video-vision/models/fluid-speech-mini-onnx', ignore_patterns=['assets/*'])"
 ```
 
 The `setup-video-vision` skill (both hosts; `/setup-video-vision` on Claude Code is a thin wrapper around it) walks you through this with exact commands, verifies each step via the `video_setup` tool, and finishes with host-specific steps (on Codex: MCP wiring, `frame-describer` agent install, paths mode).
 
-**Already have a Parakeet ONNX model?** (e.g. from the Handy app) Point the config at it instead of downloading:
+**Already have the model on disk?** Point the config at it instead of downloading:
 
 ```
-video_configure { "parakeet_model_dir": "/path/to/your/parakeet-onnx-dir" }
+video_configure { "fluid_model_dir": "/path/to/fluid-speech-mini-onnx" }
 ```
 
 **Whisper** models auto-download from HuggingFace (`ggerganov/whisper.cpp`) on first use, as upstream did.
@@ -119,11 +121,10 @@ Settings live in `~/.agent-video-vision/config.json`:
 
 ```json
 {
-  "engine": "parakeet",
+  "engine": "fluid-speech",
   "whisper_model": "auto",
-  "parakeet_model_dir": "~/.agent-video-vision/models/parakeet-tdt-0.6b-v3-int8",
-  "parakeet_quantization": "int8",
-  "parakeet_python": "~/.agent-video-vision/venv/bin/python",
+  "fluid_model_dir": "~/.agent-video-vision/models/fluid-speech-mini-onnx",
+  "fluid_python": "~/.agent-video-vision/venv/bin/python",
   "frame_resolution": 512,
   "default_fps": "auto",
   "max_frames": 100,
@@ -136,11 +137,10 @@ Settings live in `~/.agent-video-vision/config.json`:
 
 | Key | Values | Notes |
 |---|---|---|
-| `engine` | `parakeet` \| `whisper-cpp` \| `whisper-python` | Transcription engine |
+| `engine` | `fluid-speech` \| `whisper-cpp` \| `whisper-python` | Transcription engine |
 | `whisper_model` | `tiny`…`large-v3`, `auto` | Whisper engines only; auto-downloads |
-| `parakeet_model_dir` | path | Parakeet ONNX model directory |
-| `parakeet_quantization` | `int8` etc. | Matches the downloaded model variant |
-| `parakeet_python` | path | Python interpreter in the venv |
+| `fluid_model_dir` | path | Fluid Speech Mini ONNX model directory |
+| `fluid_python` | path | Python 3.12+ interpreter in the venv |
 | `frame_resolution` | px width (256–1024+) | Height auto-scales |
 | `default_fps` | `auto` or number | Extraction rate |
 | `max_frames` | number | Hard cap per extraction |
@@ -179,21 +179,21 @@ With `frame_mode: "descriptions"`, the server returns frames plus a neutral inst
 
 - **Node.js 20+** — MCP server
 - **ffmpeg** — frame/audio extraction (`apt install ffmpeg` / `brew install ffmpeg`)
-- **Python 3.10+** — parakeet engine only (for the venv)
+- **Python 3.12+** — fluid-speech engine only (for the venv; `uv` can install it for you)
 - **whisper-cli** — whisper-cpp engine only (`brew install whisper-cpp` or build from source)
 - **yt-dlp** — optional, YouTube URLs only
 
 ## Troubleshooting
 
-- **`python3 -m venv` fails ("ensurepip is not available")** — your distro splits venv out (`apt install python3-venv`), or skip it entirely with [uv](https://github.com/astral-sh/uv): `uv venv ~/.agent-video-vision/venv` then `uv pip install --python ~/.agent-video-vision/venv/bin/python "onnx-asr[cpu,hub]" "onnxruntime<1.24"`.
-- **onnxruntime errors with parakeet** — keep the pin `"onnxruntime<1.24"`. Newer onnxruntime releases break onnx-asr's loader.
-- **Parakeet model loads slowly in WSL** — model dirs under `/mnt/*` (Windows drives) read much slower than the Linux filesystem. Copy the model into `~/.agent-video-vision/models/` for fast loads.
+- **No Python 3.12 on the system** — use [uv](https://github.com/astral-sh/uv): `uv venv --python 3.12 ~/.agent-video-vision/venv` downloads a private 3.12 for the venv. `python3 -m venv` on 3.10/3.11 will not work: ONNX Runtime 1.31 (needed for the model's 2-bit weights) only ships for 3.12+.
+- **"Only 4b and 8b quantization is supported for MatMulNBits"** — the venv has an ONNX Runtime older than 1.31. Recreate it on Python 3.12+ as above.
+- **Model loads slowly in WSL** — model dirs under `/mnt/*` (Windows drives) read much slower than the Linux filesystem. Copy the model into `~/.agent-video-vision/models/` for fast loads.
 - **`video_watch` fails with a setup error** — run `video_setup` (or `/setup-video-vision` in Claude Code) to see exactly which dependency is missing.
 
 ## Credits
 
-- Parakeet ONNX runtime by [istupakov/onnx-asr](https://github.com/istupakov/onnx-asr), model export at [istupakov/parakeet-tdt-0.6b-v3-onnx](https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx).
-- Parakeet TDT 0.6B v3 model by NVIDIA.
+- **Fluid Speech Mini by FluidVoice** — model and reference ONNX runner ([FluidVoice-Labs/fluid-speech-mini-onnx](https://huggingface.co/FluidVoice-Labs/fluid-speech-mini-onnx), CC BY 4.0). `python/fluid_speech_transcribe.py` adapts that runner and adds timestamped segments.
+- Built on NVIDIA Parakeet TDT 0.6B v3 and Moondream Parakeet Ultra (CC BY 4.0).
 
 ## License
 

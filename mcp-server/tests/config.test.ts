@@ -44,9 +44,9 @@ describe("config", () => {
 
   it("merges partial config with defaults", () => {
     const configPath = join(TEST_DIR, "config.json");
-    writeFileSync(configPath, JSON.stringify({ engine: "parakeet" }));
+    writeFileSync(configPath, JSON.stringify({ engine: "fluid-speech" }));
     const loaded = loadConfig(configPath);
-    expect(loaded.engine).toBe("parakeet");
+    expect(loaded.engine).toBe("fluid-speech");
     expect(loaded.frame_mode).toBe("images");
     expect(loaded.frame_format).toBe("jpeg");
     expect(loaded.max_frames).toBe(100);
@@ -68,20 +68,35 @@ describe("config", () => {
     expect(loaded.downloads_max_age_days).toBe(7);
   });
 
-  it("defaults parakeet paths under the data dir", () => {
+  it("defaults fluid speech paths under the data dir", () => {
     const config = loadConfig(join(TEST_DIR, "config.json"));
-    expect(config.parakeet_model_dir).toBe(join(DATA_DIR, "models", "parakeet-tdt-0.6b-v3-int8"));
-    expect(config.parakeet_python).toBe(join(DATA_DIR, "venv", "bin", "python"));
-    expect(config.parakeet_quantization).toBe("int8");
+    expect(config.fluid_model_dir).toBe(join(DATA_DIR, "models", "fluid-speech-mini-onnx"));
+    expect(config.fluid_python).toBe(join(DATA_DIR, "venv", "bin", "python"));
   });
 
-  it("preserves parakeet overrides when set", () => {
+  it("preserves fluid speech overrides when set", () => {
     const configPath = join(TEST_DIR, "config.json");
-    writeFileSync(configPath, JSON.stringify({ parakeet_quantization: "fp32", parakeet_python: "/opt/venv/bin/python" }));
+    writeFileSync(configPath, JSON.stringify({ fluid_python: "/opt/venv/bin/python" }));
     const loaded = loadConfig(configPath);
-    expect(loaded.parakeet_quantization).toBe("fp32");
-    expect(loaded.parakeet_python).toBe("/opt/venv/bin/python");
-    expect(loaded.parakeet_model_dir).toBe(join(DATA_DIR, "models", "parakeet-tdt-0.6b-v3-int8"));
+    expect(loaded.fluid_python).toBe("/opt/venv/bin/python");
+    expect(loaded.fluid_model_dir).toBe(join(DATA_DIR, "models", "fluid-speech-mini-onnx"));
+  });
+
+  it("migrates a legacy parakeet config to fluid-speech and drops the old keys", () => {
+    const configPath = join(TEST_DIR, "config.json");
+    writeFileSync(configPath, JSON.stringify({
+      engine: "parakeet",
+      parakeet_model_dir: "/old/parakeet",
+      parakeet_quantization: "int8",
+      parakeet_python: "/opt/venv/bin/python",
+    }));
+    const loaded = loadConfig(configPath);
+    expect(loaded.engine).toBe("fluid-speech");
+    expect(loaded.fluid_python).toBe("/opt/venv/bin/python");
+    expect(loaded.fluid_model_dir).toBe(join(DATA_DIR, "models", "fluid-speech-mini-onnx"));
+    expect(loaded).not.toHaveProperty("parakeet_model_dir");
+    expect(loaded).not.toHaveProperty("parakeet_quantization");
+    expect(loaded).not.toHaveProperty("parakeet_python");
   });
 
   it("data dir points at ~/.agent-video-vision", () => {

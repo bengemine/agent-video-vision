@@ -23,49 +23,71 @@ export interface SetupResult {
   instructions: string[];
 }
 
-export interface ParakeetCheckOptions {
+export interface FluidSpeechCheckOptions {
   pythonPath: string;
   modelDir: string;
 }
 
-async function checkParakeet(
-  opts: ParakeetCheckOptions,
+// Fluid Speech Mini stores its weights at 2 and 4 bits (MatMulNBits); ONNX
+// Runtime gained 2-bit support in 1.31, which only ships for Python 3.12+.
+export const FLUID_SPEECH_PYTHON_PACKAGES = '"onnxruntime>=1.31" numpy soundfile huggingface_hub';
+export const FLUID_SPEECH_HF_REPO = "FluidVoice-Labs/fluid-speech-mini-onnx";
+export const FLUID_SPEECH_MODEL_FILES = ["encoder.onnx", "encoder.onnx.data", "decoder.onnx", "joint.onnx", "tokenizer.json", "config.json", "mel_filters.npy"];
+
+const RUNTIME_PROBE =
+  "import sys, onnxruntime, numpy, soundfile, huggingface_hub; " +
+  "v = tuple(int(p) for p in onnxruntime.__version__.split('.')[:2]); " +
+  "sys.exit(0 if v >= (1, 31) else 3)";
+
+async function checkFluidSpeech(
+  opts: FluidSpeechCheckOptions,
   missing: string[],
   instructions: string[],
 ): Promise<void> {
+  const venvDir = join(DATA_DIR, "venv");
   if (!existsSync(opts.pythonPath)) {
-    missing.push("parakeet python venv");
-    instructions.push(`Create a Python venv at ${join(DATA_DIR, "venv")} — expected interpreter at ${opts.pythonPath}`);
+    missing.push("fluid speech python venv (Python 3.12+)");
+    instructions.push(
+      `uv venv --python 3.12 ${venvDir} (or: python3.12 -m venv ${venvDir}) — expected interpreter at ${opts.pythonPath}`,
+    );
+    instructions.push(`uv pip install --python ${opts.pythonPath} ${FLUID_SPEECH_PYTHON_PACKAGES}`);
   } else {
     try {
-      await execFileAsync(opts.pythonPath, ["-c", "import onnx_asr"], { timeout: 30_000 });
-    } catch {
-      missing.push("onnx_asr (python package)");
-      // Venvs created with plain `uv venv` have no pip inside — give both forms.
-      instructions.push(
-        `${opts.pythonPath} -m pip install "onnx-asr[cpu,hub]" "onnxruntime<1.24"` +
-        ` (or, if the venv has no pip: uv pip install --python ${opts.pythonPath} "onnx-asr[cpu,hub]" "onnxruntime<1.24")`,
-      );
+      await execFileAsync(opts.pythonPath, ["-c", RUNTIME_PROBE], { timeout: 30_000 });
+    } catch (err) {
+      const code = (err as { code?: number }).code;
+      if (code === 3) {
+        missing.push("onnxruntime >= 1.31 (needs a Python 3.12+ venv)");
+        instructions.push(
+          `Recreate the venv on Python 3.12+: rm -rf ${venvDir} && uv venv --python 3.12 ${venvDir}` +
+          ` && uv pip install --python ${opts.pythonPath} ${FLUID_SPEECH_PYTHON_PACKAGES}`,
+        );
+      } else {
+        missing.push("onnxruntime / numpy / soundfile / huggingface_hub (python packages)");
+        // Venvs created with plain `uv venv` have no pip inside — give both forms.
+        instructions.push(
+          `uv pip install --python ${opts.pythonPath} ${FLUID_SPEECH_PYTHON_PACKAGES}` +
+          ` (or, if the venv has pip: ${opts.pythonPath} -m pip install ${FLUID_SPEECH_PYTHON_PACKAGES})`,
+        );
+      }
     }
   }
 
-  let hasEncoder = false;
-  let hasVocab = false;
-  if (existsSync(opts.modelDir)) {
-    for (const file of readdirSync(opts.modelDir)) {
-      if (file.startsWith("encoder") && file.endsWith(".onnx")) hasEncoder = true;
-      if (file === "vocab.txt") hasVocab = true;
-    }
-  }
-  if (!hasEncoder || !hasVocab) {
-    missing.push("parakeet model files");
-    instructions.push(`Download the Parakeet ONNX model (encoder*.onnx + vocab.txt) into ${opts.modelDir}`);
+  const present = existsSync(opts.modelDir) ? readdirSync(opts.modelDir) : [];
+  const absent = FLUID_SPEECH_MODEL_FILES.filter((f) => !present.includes(f));
+  if (absent.length > 0) {
+    missing.push("fluid speech model files");
+    instructions.push(
+      `${opts.pythonPath} -c "from huggingface_hub import snapshot_download; ` +
+      `snapshot_download('${FLUID_SPEECH_HF_REPO}', local_dir='${opts.modelDir}', ignore_patterns=['assets/*'])"` +
+      ` (missing: ${absent.join(", ")})`,
+    );
   }
 }
 
 export async function checkDependencies(
   engine: Engine,
-  parakeetOpts?: ParakeetCheckOptions,
+  fluidOpts?: FluidSpeechCheckOptions,
 ): Promise<SetupResult> {
   const missing: string[] = [];
   const instructions: string[] = [];
@@ -100,8 +122,8 @@ export async function checkDependencies(
     }
   }
 
-  if (engine === "parakeet" && parakeetOpts) {
-    await checkParakeet(parakeetOpts, missing, instructions);
+  if (engine === "fluid-speech" && fluidOpts) {
+    await checkFluidSpeech(fluidOpts, missing, instructions);
   }
 
   if (missing.length === 0) {

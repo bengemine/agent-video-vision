@@ -1,0 +1,8 @@
+agent-video-vision is MIT licensed (see LICENSE).
+
+The transcription runner mcp-server/python/fluid_speech_transcribe.py adapts
+the reference transcribe.py distributed with Fluid Speech Mini by FluidVoice
+(https://huggingface.co/FluidVoice-Labs/fluid-speech-mini-onnx), licensed
+CC BY 4.0. Fluid Speech Mini is built on NVIDIA Parakeet TDT 0.6B v3 and
+Moondream Parakeet Ultra, both CC BY 4.0. The model weights are not shipped
+in this repository; the setup wizard downloads them from Hugging Face.

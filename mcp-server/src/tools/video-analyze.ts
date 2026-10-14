@@ -14,7 +14,7 @@ import {
 import { getVideoMetadata } from "../extractors/frames.js";
 import { extractAudio } from "../extractors/audio.js";
 import { transcribeWithWhisper } from "../backends/local.js";
-import { transcribeWithParakeet } from "../backends/parakeet.js";
+import { transcribeWithFluidSpeech } from "../backends/fluid-speech.js";
 import {
   buildAnalysisCommand,
   parseScdetOutput,
@@ -215,13 +215,12 @@ export function registerVideoAnalyze(server: McpServer): void {
 
           if (captionFallbackReason === null && resolved.captions) {
             audioResult = buildCaptionAudioResult(resolved.captions);
-          } else if (config.engine === "parakeet") {
+          } else if (config.engine === "fluid-speech") {
             const audioDir = join(workDir, "audio");
             const wavPath = await extractAudio(safePath, audioDir, {});
-            audioResult = await transcribeWithParakeet(wavPath, {
-              pythonPath: config.parakeet_python,
-              modelDir: config.parakeet_model_dir,
-              quantization: config.parakeet_quantization,
+            audioResult = await transcribeWithFluidSpeech(wavPath, {
+              pythonPath: config.fluid_python,
+              modelDir: config.fluid_model_dir,
             });
           } else if (config.engine === "whisper-cpp" || config.engine === "whisper-python") {
             const audioDir = join(workDir, "audio");

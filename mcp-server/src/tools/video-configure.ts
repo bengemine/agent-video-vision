@@ -6,14 +6,13 @@ import { CONFIG_PATH, SESSIONS_DIR, loadConfig, saveConfig } from "../config.js"
 export function registerVideoConfigure(server: McpServer): void {
   server.tool(
     "video_configure",
-    "Configure video perception preferences (engine, resolution, fps, whisper model, parakeet paths, etc.)",
+    "Configure video perception preferences (engine, resolution, fps, whisper model, fluid speech paths, etc.)",
     {
-      engine: z.enum(["unconfigured", "parakeet", "whisper-cpp", "whisper-python"]).optional(),
+      engine: z.enum(["unconfigured", "fluid-speech", "whisper-cpp", "whisper-python"]).optional(),
       whisper_model: z.enum(["tiny", "base", "small", "medium", "large-v3-turbo", "large-v3", "auto"]).optional(),
       whisper_at: z.boolean().optional(),
-      parakeet_model_dir: z.string().min(1).optional(),
-      parakeet_quantization: z.enum(["int8", "fp32"]).optional(),
-      parakeet_python: z.string().min(1).optional(),
+      fluid_model_dir: z.string().min(1).optional(),
+      fluid_python: z.string().min(1).optional(),
       frame_mode: z.enum(["images", "descriptions", "paths"]).optional(),
       frame_format: z.enum(["jpeg", "png", "webp"]).optional(),
       frame_resolution: z.number().min(128).max(2048).optional(),

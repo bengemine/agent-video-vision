@@ -1,6 +1,6 @@
 {
   "name": "agent-video-vision",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Local-only video perception MCP server for AI coding agents (Claude Code, Codex)",
   "type": "module",
   "main": "dist/index.js",
@@ -44,7 +44,7 @@
     "multimodal",
     "ffmpeg",
     "whisper",
-    "parakeet"
+    "fluid-speech"
   ],
   "author": "bengemine",
   "license": "MIT",

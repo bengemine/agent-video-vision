@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-10-14
+
+### Changed
+
+- **Transcription engine switched to Fluid Speech Mini** (`engine: "fluid-speech"`), replacing the Parakeet engine. Same Parakeet-class English accuracy in a ~300MB download (was ~670MB), ~0.7GB RAM (was ~2GB), and faster on CPU (~8x realtime vs ~6x measured on a 12-core laptop). English only — use `whisper-cpp` for other languages.
+- Runner is `python/fluid_speech_transcribe.py`: plain ONNX Runtime (no onnx-asr, no PyTorch), with segment timestamps derived from the TDT decoder's frame positions instead of a separate Silero VAD pass.
+- The Python venv now needs **Python 3.12+** and **onnxruntime >= 1.31** (2-bit `MatMulNBits` support). The setup wizard uses `uv venv --python 3.12`.
+- Config keys `parakeet_model_dir`, `parakeet_quantization`, `parakeet_python` are replaced by `fluid_model_dir` and `fluid_python`. Existing configs with `engine: "parakeet"` are migrated on load.
+
+### Removed
+
+- Parakeet engine, `onnx-asr` dependency and `python/parakeet_transcribe.py`.
+
 ## [0.1.0] - 2026-06-13
 
 Initial release of **agent-video-vision**.
