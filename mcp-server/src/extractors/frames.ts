@@ -3,7 +3,7 @@ import { promisify } from "util";
 import { readFileSync, readdirSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
 import type { VideoMetadata, Frame, FrameFormat, Segment } from "../types.js";
-import { formatHMS, parseHMS } from "../utils/timestamps.js";
+import { formatFrameTimestamp, formatHMS, parseHMS } from "../utils/timestamps.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -90,6 +90,25 @@ function isMissingWebpEncoderError(error: unknown): boolean {
   );
 }
 
+/**
+ * ffmpeg input + range args. -ss goes before -i (fast seek), which resets
+ * timestamps to 0, so the end is given as a duration (-t): an output -to
+ * would be read as a duration from the seek point, not as an end time.
+ */
+export function inputRangeArgs(videoPath: string, startTime?: string, endTime?: string): string[] {
+  const args: string[] = [];
+  if (startTime) args.push("-ss", startTime);
+  args.push("-i", videoPath);
+  if (endTime) {
+    if (startTime) {
+      args.push("-t", String(Math.max(0, parseHMS(endTime) - parseHMS(startTime))));
+    } else {
+      args.push("-to", endTime);
+    }
+  }
+  return args;
+}
+
 export async function extractFrames(
   videoPath: string,
   options: ExtractFramesOptions,
@@ -109,17 +128,7 @@ export async function extractFrames(
     mkdirSync(outputDir, { recursive: true });
   }
 
-  const args: string[] = [];
-
-  if (startTime) {
-    args.push("-ss", startTime);
-  }
-
-  args.push("-i", videoPath);
-
-  if (endTime) {
-    args.push("-to", endTime);
-  }
+  const args: string[] = [...inputRangeArgs(videoPath, startTime, endTime)];
 
   args.push(
     "-vf", `fps=${fps},scale=${resolution}:-1`,
@@ -151,7 +160,7 @@ export async function extractFrames(
     const filePath = join(outputDir, file);
     const imageData = readFileSync(filePath);
     const base64 = imageData.toString("base64");
-    const timestamp = formatHMS(offsetSeconds + index / fps);
+    const timestamp = formatFrameTimestamp(offsetSeconds + index / fps);
 
     return {
       timestamp,
@@ -203,13 +212,15 @@ export async function extractFramesBySegments(
 ): Promise<SegmentFrame[]> {
   const allFrames: SegmentFrame[] = [];
 
-  for (const segment of segments) {
+  for (const [index, segment] of segments.entries()) {
     const resolution = segment.resolution ?? 512;
-    const resDir = join(baseOutputDir, String(resolution));
+    // One sub-directory per segment: ffmpeg names files frame_0001.. in every
+    // run, so two segments at the same resolution must not share a folder.
+    const resDir = join(baseOutputDir, String(resolution), `seg${index}`);
 
     if (!existsSync(resDir)) mkdirSync(resDir, { recursive: true });
 
-    const frames = await extractFrames(videoPath, {
+    const extractOptions = {
       fps: segment.fps,
       resolution,
       outputDir: resDir,
@@ -217,7 +228,8 @@ export async function extractFramesBySegments(
       startTime: segment.start,
       endTime: segment.end,
       maxFrames: 1000,
-    });
+    };
+    const frames = await extractFrames(videoPath, extractOptions);
 
     for (const frame of frames) {
       allFrames.push({ ...frame, resolution });
