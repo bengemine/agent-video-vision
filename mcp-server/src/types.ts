@@ -18,6 +18,12 @@ export interface Config {
   enable_index: boolean;
   session_max_age_days: number;
   downloads_max_age_days: number;
+  /** Drop a frame when fewer than this fraction of its pixels differ from the last kept frame (0.00002 ≈ 41 px on 1920x1080). */
+  dedupe_threshold: number;
+  /** Frames per contact sheet (tiled 2 columns wide). */
+  contact_sheet_size: number;
+  /** video_watch with fps "auto" on a clip up to this many seconds uses dense mode: 1–2 fps + dedupe + contact sheets. 0 turns it off. */
+  dense_max_seconds: number;
 }
 
 export interface VideoMetadata {

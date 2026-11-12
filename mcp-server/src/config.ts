@@ -24,6 +24,9 @@ export const defaultConfig: Config = {
   enable_index: false,
   session_max_age_days: 7,
   downloads_max_age_days: 7,
+  dedupe_threshold: 0.00002,
+  contact_sheet_size: 10,
+  dense_max_seconds: 180,
 };
 
 export function loadConfig(configPath: string): Config {

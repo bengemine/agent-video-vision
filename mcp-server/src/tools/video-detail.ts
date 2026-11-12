@@ -22,7 +22,10 @@ import {
 } from "../session/manifest.js";
 import type { SessionManifest } from "../types.js";
 
-const HMS_REGEX = /^\d{2}:\d{2}:\d{2}$/;
+import { HMS_REGEX } from "../utils/timestamps.js";
+import type { DedupeStats } from "../extractors/dedupe.js";
+import { buildContactSheets, type ContactSheet } from "../extractors/contact-sheet.js";
+import { contactSheetContent, dedupeSummary } from "./sheet-output.js";
 
 // ---------------------------------------------------------------------------
 // Internal types
@@ -203,6 +206,27 @@ export function registerVideoDetail(server: McpServer): void {
         .describe(
           "Skip re-writing of frames already cached at the same resolution",
         ),
+      dedupe: z
+        .boolean()
+        .default(false)
+        .describe("Drop extracted frames that are near-identical to the last kept frame (a cursor move is kept)"),
+      dedupe_threshold: z.coerce
+        .number()
+        .min(0)
+        .max(1)
+        .optional()
+        .describe("Fraction of pixels that must change to keep a frame (default from config, 0.00002 ≈ 41 px on 1920x1080)"),
+      contact_sheet: z
+        .boolean()
+        .default(false)
+        .describe("Return the viewed frames tiled into timestamped grid images (2 columns) instead of one image per frame; frame paths are still listed"),
+      sheet_size: z.coerce
+        .number()
+        .int()
+        .min(1)
+        .max(30)
+        .optional()
+        .describe("Frames per contact sheet (default 10 = 2x5)"),
     },
     async (params) => {
       // ------------------------------------------------------------------
@@ -213,9 +237,16 @@ export function registerVideoDetail(server: McpServer): void {
       const safePath = resolved.path;
       const frameFormat = params.frame_format || config.frame_format;
       const frameMode = config.frame_mode;
-      // Paths mode forces the session dir so frame files survive the call —
-      // the host opens them from disk afterwards.
-      const useSession = config.enable_index || frameMode === "paths";
+      // Paths mode and contact sheets force the session dir so frame files
+      // survive the call. A plain `view` request also reads the session cache
+      // (frames saved by an earlier video_watch / video_detail call).
+      const useSession =
+        config.enable_index ||
+        frameMode === "paths" ||
+        params.contact_sheet ||
+        (!!params.view && params.view.length > 0);
+      const dedupeThreshold = params.dedupe_threshold ?? config.dedupe_threshold;
+      let dedupeStats: DedupeStats | null = null;
 
       let sessionDir: string | null = null;
       let manifest: SessionManifest | null = null;
@@ -239,12 +270,17 @@ export function registerVideoDetail(server: McpServer): void {
         mkdirSync(tmpWorkDir, { recursive: true });
 
         try {
+          const segmentDedupe = params.dedupe
+            ? { threshold: dedupeThreshold, stats: { extracted: 0, kept: 0, dropped: 0, threshold: dedupeThreshold } }
+            : undefined;
           extractedFrames = await extractFramesBySegments(
             safePath,
             params.segments,
             tmpWorkDir,
             frameFormat,
+            segmentDedupe,
           );
+          if (segmentDedupe) dedupeStats = segmentDedupe.stats;
         } finally {
           rmSync(tmpWorkDir, { recursive: true, force: true });
         }
@@ -366,12 +402,30 @@ export function registerVideoDetail(server: McpServer): void {
         });
       }
 
+      const summary = dedupeSummary(dedupeStats);
+
+      if (params.contact_sheet && sessionDir) {
+        const frameList = framesToView.map((f) => ({ timestamp: f.timestamp, path: f.path }));
+        const maxRes = Math.max(512, ...(params.segments ?? []).map((s) => s.resolution ?? 512));
+        const sheets: ContactSheet[] = await buildContactSheets(
+          frameList.filter((f) => f.path).map((f) => ({ timestamp: f.timestamp, path: f.path! })),
+          {
+            outputDir: join(sessionDir, "sheets", String(Date.now())),
+            perSheet: params.sheet_size ?? config.contact_sheet_size,
+            columns: 2,
+            tileWidth: Math.min(maxRes, 960),
+          },
+        );
+        content.push(...contactSheetContent(sheets, frameList, frameMode, summary));
+        return { content: content as any };
+      }
+
       if (frameMode === "paths") {
         // 2+3. paths mode — list persistent file paths; the host opens them itself
         const lines = framesToView.map((f) => `${f.timestamp} -> ${f.path ?? "(file missing)"}`);
         content.push({
           type: "text",
-          text: `## Viewing ${framesToView.length} frame(s)\nFrame mode is 'paths' — open these image files with your host's image viewing tool (e.g. Codex view_image) to see them.\n\n${lines.join("\n")}`,
+          text: `## Viewing ${framesToView.length} frame(s)\n${summary ? summary + "\n" : ""}Frame mode is 'paths' — open these image files with your host's image viewing tool (e.g. Codex view_image) to see them.\n\n${lines.join("\n")}`,
         });
         return { content: content as any };
       }
@@ -379,7 +433,7 @@ export function registerVideoDetail(server: McpServer): void {
       // 2. Frame count info
       content.push({
         type: "text",
-        text: `## Viewing ${framesToView.length} frame(s)`,
+        text: `## Viewing ${framesToView.length} frame(s)${summary ? "\n" + summary : ""}`,
       });
 
       // 3. Frames as images

@@ -16,6 +16,12 @@ You have access to video understanding tools via the agent-video-vision MCP serv
 - `video_configure` — Change settings (engine, resolution, frame_mode, etc.).
 - `video_setup` — Check dependencies and report what's missing.
 
+## Short screen recordings (feedback videos, under ~3 minutes)
+
+Call `video_watch` with `fps: "auto"` and no `segments` or `view_sample`. This runs dense mode: 1–2 fps, frames that are near-identical to the previous kept frame are dropped (cursor moves are kept), and the rest come back as contact sheets of 10 timestamped tiles. Skip `video_analyze` here.
+- Look at EVERY sheet. Do not sample a few: the cursor position is often the point.
+- Where the speaker says "here", "this" or "that one", find that time in the transcript and zoom in with `video_detail`: a 1–2 second segment at `resolution: 1280`, then `view` the timestamp (or `contact_sheet: true` to see the moment frame by frame).
+
 ## Workflow
 
 **IMPORTANT: You MUST follow these steps in order. Do NOT skip step 2.**
@@ -26,7 +32,7 @@ You have access to video understanding tools via the agent-video-vision MCP serv
    for transcription, and falls back to the configured local engine only when
    captions are missing, empty, or suspiciously incomplete.
 
-2. **REQUIRED for videos > 30s:** Call `video_analyze` BEFORE extracting any frames.
+2. **REQUIRED for videos > 30s** (except short screen recordings, see above): Call `video_analyze` BEFORE extracting any frames.
    This is NOT optional — it gives you structural data to make smart extraction decisions.
    Select filters relevant to the user's question:
 
@@ -52,8 +58,8 @@ You have access to video understanding tools via the agent-video-vision MCP serv
    - Prefer fewer segments at lower FPS — you can always drill deeper
 
 4. Call `video_watch` to extract frames:
-   - For **short videos (< 2 minutes):** Use `fps: "auto"` without `view_sample` — short videos need full coverage to avoid missing brief moments. The auto FPS already adapts to duration.
-   - For **long videos (> 2 minutes):** Use `segments` based on analysis data with variable FPS, and `view_sample` to limit initial frame count. You can always drill deeper with `video_detail`.
+   - For **short videos (< 3 minutes):** Use `fps: "auto"` without `view_sample` — this is dense mode (see above), which needs full coverage to avoid missing brief moments.
+   - For **long videos (> 3 minutes):** Use `segments` based on analysis data with variable FPS, and `view_sample` to limit initial frame count. You can always drill deeper with `video_detail`.
 
 5. Use `video_detail` to drill into specific moments:
    - Start with 3-5 second windows around points of interest
@@ -61,7 +67,7 @@ You have access to video understanding tools via the agent-video-vision MCP serv
    - Then request specific timestamps with `view` if you need more detail
    - Expand the window only if the initial view is insufficient
    - Treat frame viewing like a binary search — narrow down to what matters
-   - Never view all extracted frames at once
+   - Never view all extracted frames at once as single images (contact sheets are the exception: view them all)
 
 6. When the user asks follow-up questions about the same video, consult
    the manifest already in your context. Do not re-extract frames you

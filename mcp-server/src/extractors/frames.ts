@@ -4,6 +4,7 @@ import { readFileSync, readdirSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
 import type { VideoMetadata, Frame, FrameFormat, Segment } from "../types.js";
 import { formatFrameTimestamp, formatHMS, parseHMS } from "../utils/timestamps.js";
+import { applyKeepMask, computeKeepMask, type DedupeStats } from "./dedupe.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -209,6 +210,7 @@ export async function extractFramesBySegments(
   segments: Segment[],
   baseOutputDir: string,
   format: FrameFormat = "jpeg",
+  dedupe?: { threshold: number; stats: DedupeStats },
 ): Promise<SegmentFrame[]> {
   const allFrames: SegmentFrame[] = [];
 
@@ -229,7 +231,17 @@ export async function extractFramesBySegments(
       endTime: segment.end,
       maxFrames: 1000,
     };
-    const frames = await extractFrames(videoPath, extractOptions);
+    let [frames, mask] = await Promise.all([
+      extractFrames(videoPath, extractOptions),
+      dedupe ? computeKeepMask(videoPath, { ...extractOptions, threshold: dedupe.threshold }) : Promise.resolve(null),
+    ]);
+    if (dedupe && mask) {
+      const before = frames.length;
+      frames = applyKeepMask(frames, mask.keep);
+      dedupe.stats.extracted += before;
+      dedupe.stats.kept += frames.length;
+      dedupe.stats.dropped += before - frames.length;
+    }
 
     for (const frame of frames) {
       allFrames.push({ ...frame, resolution });

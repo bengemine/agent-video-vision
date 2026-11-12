@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterAll, vi } from "vitest";
 import { join } from "path";
 import { existsSync, rmSync } from "fs";
-import { deriveFps, registerVideoWatch } from "../../src/tools/video-watch.js";
+import { deriveFps, isDenseAuto, registerVideoWatch } from "../../src/tools/video-watch.js";
 import { registerVideoConfigure } from "../../src/tools/video-configure.js";
 import { CONFIG_PATH, DATA_DIR, SESSIONS_DIR, defaultConfig, loadConfig, saveConfig } from "../../src/config.js";
 
@@ -42,6 +42,23 @@ function pathLines(result: { content: ContentBlock[] }): string[] {
   expect(block).toBeDefined();
   return block!.text.split("\n").filter((line) => line.includes(" -> "));
 }
+
+describe("isDenseAuto", () => {
+  const base = { fps: "auto" as const, duration_seconds: 65, dense_max_seconds: 180 };
+  it("is on for short clips with fps auto", () => {
+    expect(isDenseAuto(base)).toBe(true);
+  });
+  it("is off for long videos, explicit fps, view_sample, segments, or when disabled", () => {
+    expect(isDenseAuto({ ...base, duration_seconds: 600 })).toBe(false);
+    expect(isDenseAuto({ ...base, fps: 0.2 })).toBe(false);
+    expect(isDenseAuto({ ...base, view_sample: 4 })).toBe(false);
+    expect(isDenseAuto({ ...base, segments: [{}] })).toBe(false);
+    expect(isDenseAuto({ ...base, dense_max_seconds: 0 })).toBe(false);
+  });
+  it("uses the start/end window, not the full length", () => {
+    expect(isDenseAuto({ ...base, duration_seconds: 3600, start_time: "00:10:00", end_time: "00:11:00" })).toBe(true);
+  });
+});
 
 describe("deriveFps", () => {
   it("respects explicit numeric fps", () => {

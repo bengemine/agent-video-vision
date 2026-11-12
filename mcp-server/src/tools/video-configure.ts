@@ -21,6 +21,9 @@ export function registerVideoConfigure(server: McpServer): void {
       enable_index: z.boolean().optional(),
       session_max_age_days: z.number().min(1).optional(),
       downloads_max_age_days: z.number().min(1).optional(),
+      dedupe_threshold: z.number().min(0).max(1).optional().describe("Fraction of pixels that must change for a frame to be kept when dedupe is on (0.00002 ≈ 41 px on 1920x1080)"),
+      contact_sheet_size: z.number().int().min(1).max(30).optional().describe("Frames per contact sheet (2 columns wide)"),
+      dense_max_seconds: z.number().min(0).optional().describe("video_watch with fps 'auto' on clips up to this length uses dense mode (1–2 fps + dedupe + contact sheets); 0 turns it off"),
       clear_sessions: z.boolean().optional(),
     },
     async (params) => {
