@@ -310,6 +310,73 @@ def check_runtime():
         )
 
 
+SHERPA_FILES = ["encoder.q4.onnx", "decoder.int8.onnx", "joiner.int8.onnx", "tokens.txt"]
+SHERPA_CHUNK_S = 60.0     # decode long audio in ~60 s windows...
+SHERPA_SEARCH_S = 4.0     # ...cut at the quietest 100 ms within this many seconds of the target
+
+
+def is_sherpa_layout(model_dir):
+    return all(os.path.exists(os.path.join(model_dir, f)) for f in SHERPA_FILES)
+
+
+def sherpa_transcribe(model_dir, audio_path, threads):
+    """Fluid Speech Mini, sherpa-onnx conversion (GitHub-hosted copy) -> [(word, seconds)], audio_s."""
+    import wave
+    import numpy as np
+    import sherpa_onnx
+
+    with wave.open(audio_path) as w:
+        rate, ch, width = w.getframerate(), w.getnchannels(), w.getsampwidth()
+        raw = w.readframes(w.getnframes())
+    if width != 2:
+        raise RuntimeError(f"expected 16-bit PCM wav, got {width * 8}-bit")
+    wav = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+    if ch > 1:
+        wav = wav.reshape(-1, ch).mean(axis=1)
+    audio_s = len(wav) / rate
+
+    rec = sherpa_onnx.OfflineRecognizer.from_transducer(
+        encoder=os.path.join(model_dir, "encoder.q4.onnx"),
+        decoder=os.path.join(model_dir, "decoder.int8.onnx"),
+        joiner=os.path.join(model_dir, "joiner.int8.onnx"),
+        tokens=os.path.join(model_dir, "tokens.txt"),
+        model_type="nemo_transducer",
+        num_threads=threads or 4,
+    )
+
+    # Cut points at quiet moments so no word is split across windows.
+    cuts, pos, n = [0], 0, len(wav)
+    chunk, search, win = int(SHERPA_CHUNK_S * rate), int(SHERPA_SEARCH_S * rate), int(0.1 * rate)
+    while n - pos > chunk + search:
+        lo, hi = pos + chunk - search, pos + chunk + search
+        energies = [float(np.mean(wav[i:i + win] ** 2)) for i in range(lo, hi - win, win)]
+        pos = lo + int(np.argmin(energies)) * win + win // 2
+        cuts.append(pos)
+    cuts.append(n)
+
+    words = []
+    for a, b in zip(cuts, cuts[1:]):
+        seg = wav[a:b]
+        if seg.size == 0 or float(np.abs(seg).max()) < 0.003:
+            continue  # silent window
+        s = rec.create_stream()
+        s.accept_waveform(rate, seg)
+        rec.decode_stream(s)
+        r = s.result
+        offset = a / rate
+        cur, cur_t = "", None
+        for tok, t in zip(r.tokens, r.timestamps):
+            if tok.startswith(" ") or cur_t is None:
+                if cur.strip():
+                    words.append((cur.strip(), round(offset + cur_t, 3)))
+                cur, cur_t = tok, t
+            else:
+                cur += tok
+        if cur.strip():
+            words.append((cur.strip(), round(offset + cur_t, 3)))
+    return words, audio_s
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Transcribe a wav file with Fluid Speech Mini (ONNX Runtime)")
     parser.add_argument("--model-dir", required=True, help="Directory containing the ONNX model files")
@@ -318,6 +385,17 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
+        if is_sherpa_layout(args.model_dir):
+            if not os.path.exists(args.audio):
+                raise RuntimeError(f"wav file not found: {args.audio}")
+            try:
+                import sherpa_onnx  # noqa: F401
+            except ImportError:
+                raise RuntimeError("sherpa-onnx is not installed yet — run bootstrap.sh in the plugin folder, then retry")
+            words, audio_s = sherpa_transcribe(args.model_dir, args.audio, args.threads)
+            json.dump({"segments": group_segments(words, audio_s)}, sys.stdout)
+            sys.stdout.write("\n")
+            return 0
         check_runtime()
         missing = [f for f in MODEL_FILES if not os.path.exists(os.path.join(args.model_dir, f))]
         if missing:

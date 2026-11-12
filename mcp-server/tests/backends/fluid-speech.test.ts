@@ -120,6 +120,13 @@ describe("transcribeWithFluidSpeech preflight checks", () => {
     expect(execFileCalls).toHaveLength(0);
   });
 
+  it("accepts the sherpa-onnx layout (encoder.q4.onnx + tokens.txt)", async () => {
+    readdirSyncImpl = () => ["encoder.q4.onnx", "decoder.int8.onnx", "joiner.int8.onnx", "tokens.txt"];
+
+    await transcribeWithFluidSpeech("/tmp/a.wav", OPTS);
+    expect(execFileCalls).toHaveLength(1);
+  });
+
   it("throws when the model dir does not exist", async () => {
     existsSyncImpl = (path) => path !== OPTS.modelDir;
 

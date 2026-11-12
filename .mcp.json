@@ -1,6 +1,6 @@
 {
   "agent-video-vision": {
-    "command": "node",
-    "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/index.js"]
+    "command": "bash",
+    "args": ["${CLAUDE_PLUGIN_ROOT}/start.sh"]
   }
 }

@@ -7,6 +7,14 @@ description: Use when the user mentions a video file (.mp4, .mov, .avi, .mkv, .w
 
 You have access to video understanding tools via the agent-video-vision MCP server. Everything runs locally — frame extraction via ffmpeg, transcription on CPU (Fluid Speech Mini or Whisper). The server makes no LLM calls; all visual understanding happens in your session.
 
+## Fresh machines (cloud sessions)
+
+This build sets itself up. When the session starts, the server runs `bootstrap.sh` in the background: it installs sherpa-onnx and yt-dlp, downloads Fluid Speech Mini (about 300 MB, from a GitHub copy, since huggingface.co is blocked in cloud sessions) to `~/.agent-video-vision/models/`, and points the config at it. This takes a minute or two. Never send the user to the setup wizard for this.
+
+- If a `video_*` call reports that the model, Python or sherpa-onnx is missing, run `bash "<plugin root>/bootstrap.sh"` in the foreground (the plugin root is two directories above this SKILL.md; it waits if a background run is in progress), then retry the call. The log is `~/.agent-video-vision/bootstrap.log`.
+- Fluid Speech Mini is English-only. For speech in other languages (Hindi etc.), say the transcript may be unreliable, and lean on the frames and on-screen text.
+- In cloud sessions most social sites (Instagram, TikTok) can't be reached for download; if a URL fails, ask the user to attach the video file instead.
+
 ## Available Tools
 
 - `video_analyze` — Analyze video structure with ffmpeg filters (scene changes, silence, motion, etc.). Use this BEFORE extracting frames to plan your strategy.

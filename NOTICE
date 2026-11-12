@@ -6,3 +6,7 @@ the reference transcribe.py distributed with Fluid Speech Mini by FluidVoice
 CC BY 4.0. Fluid Speech Mini is built on NVIDIA Parakeet TDT 0.6B v3 and
 Moondream Parakeet Ultra, both CC BY 4.0. The model weights are not shipped
 in this repository; the setup wizard downloads them from Hugging Face.
+
+Cloud self-setup build: transcription model is Fluid Speech Mini by FluidVoice
+(CC BY 4.0), sherpa-onnx conversion published at
+https://github.com/alcun/heyra-desktop/releases/tag/model-fluid-speech-mini

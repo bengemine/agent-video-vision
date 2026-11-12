@@ -18,13 +18,16 @@ export interface FluidSpeechOptions {
 // Compiled location is dist/backends/fluid-speech.js; the runner script ships
 // alongside dist in <package root>/python/. Two levels up from this file's
 // directory reaches the package root in both dist/ and src/ (vitest) layouts.
-const SCRIPT_PATH = join(
-  dirname(fileURLToPath(import.meta.url)),
-  "..",
-  "..",
-  "python",
-  "fluid_speech_transcribe.py",
-);
+// Also works when bundled into a single dist/index.js (one level up).
+const HERE = dirname(fileURLToPath(import.meta.url));
+// Resolved at call time (not module load) so tests can mock fs first.
+function scriptPath(): string {
+  const candidates = [
+    join(HERE, "..", "..", "python", "fluid_speech_transcribe.py"),
+    join(HERE, "..", "python", "fluid_speech_transcribe.py"),
+  ];
+  return candidates.find((p) => existsSync(p)) ?? candidates[0];
+}
 
 interface FluidSpeechScriptSegment {
   start: number;
@@ -70,12 +73,21 @@ export async function transcribeWithFluidSpeech(
     );
   }
   const files = existsSync(modelDir) ? readdirSync(modelDir) : [];
-  const hasModel = files.includes("encoder.onnx") && files.includes("tokenizer.json");
+  // Two layouts are accepted: the original HuggingFace ONNX build
+  // (encoder.onnx + tokenizer.json) and the sherpa-onnx conversion hosted on
+  // GitHub (encoder.q4.onnx + tokens.txt), which cloud sessions use because
+  // huggingface.co is not reachable there.
+  const hasModel =
+    (files.includes("encoder.onnx") && files.includes("tokenizer.json")) ||
+    (files.includes("encoder.q4.onnx") && files.includes("tokens.txt"));
   if (!hasModel) {
     throw new Error(
-      `Fluid Speech model dir ${modelDir} is missing encoder.onnx / tokenizer.json — run the setup wizard (see commands/setup-video-vision.md)`,
+      `Fluid Speech model dir ${modelDir} is missing encoder.onnx / tokenizer.json — run the setup wizard (see commands/setup-video-vision.md). ` +
+      `The sherpa-onnx layout (encoder.q4.onnx + tokens.txt) also works: a cloud session sets it up at start-up; ` +
+      `if it is still missing, run: bash "\${CLAUDE_PLUGIN_ROOT}/bootstrap.sh" (log: ~/.agent-video-vision/bootstrap.log), then retry.`,
     );
   }
+  const SCRIPT_PATH = scriptPath();
   if (!existsSync(SCRIPT_PATH)) {
     throw new Error(
       `Fluid Speech runner script not found at ${SCRIPT_PATH} — the agent-video-vision install is incomplete`,

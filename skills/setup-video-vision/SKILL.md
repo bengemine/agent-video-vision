@@ -9,6 +9,9 @@ Guide the user through configuring agent-video-vision step by step. Ask one ques
 
 ## Step 0: Build the server (fresh installs)
 
+**This build ships prebuilt and sets itself up** (bootstrap.sh runs at session start and installs Fluid Speech Mini from GitHub). Skip this step and the engine questions unless the user explicitly wants Whisper; if Fluid Speech isn't ready, run `bash <repo-root>/bootstrap.sh` and retry.
+
+
 A fresh plugin install ships source only — the MCP server must be built once. Find the repo root (it is two directories up from this SKILL.md file; on Claude Code plugin installs it lives under `~/.claude/plugins/`). Then check whether `mcp-server/dist/index.js` exists there. If it does not:
 
 ```bash
